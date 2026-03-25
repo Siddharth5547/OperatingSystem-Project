@@ -55,3 +55,63 @@ class Task:
 
     def __repr__(self):
         return f"T{self.id}"
+
+        
+# ─────────────────────────── Core ─────────────────────────────────
+
+@dataclass
+class Core:
+    id: int
+    core_type: CoreType
+    frequency: float = FREQ_HIGH
+    temperature: float = TEMP_AMBIENT
+    energy: float = 0.0
+    current_task: Optional[Task] = None
+
+    # ── DVFS ──
+    def set_frequency(self, level: str):
+        mapping = {"LOW": FREQ_LOW, "MEDIUM": FREQ_MED, "HIGH": FREQ_HIGH}
+        self.frequency = mapping.get(level, FREQ_HIGH)
+
+    # ── Thermal model ──
+    def update_temperature(self):
+        if self.current_task is not None:
+            load = 1.0
+            self.temperature += HEATING_COEFF * self.frequency * load * 0.1
+        else:
+            self.temperature -= COOLING_FACTOR * (self.temperature - TEMP_AMBIENT)
+        self.temperature = max(self.temperature, TEMP_AMBIENT)
+
+    def is_overheated(self) -> bool:
+        return self.temperature >= TEMP_THRESHOLD
+
+    # ── Energy ──
+    def compute_energy(self, load: float, dt: float = 1.0) -> float:
+        """energy = frequency² × load × dt"""
+        e = (self.frequency ** 2) * load * dt
+        self.energy += e
+        return e
+
+    def label(self) -> str:
+        return f"Core-{self.id} ({self.core_type.value})"
+
+    def __repr__(self):
+        return self.label()
+
+# ─────────────────────── Workload Predictor ───────────────────────
+
+class WorkloadPredictor:
+    """Simple moving-average predictor over recent burst times."""
+
+    def __init__(self, window: int = 5):
+        self.window = window
+        self.history: List[float] = []
+
+    def record(self, burst: float):
+        self.history.append(burst)
+
+    def predict(self) -> float:
+        if not self.history:
+            return 3.0                 # default guess
+        recent = self.history[-self.window:]
+        return sum(recent) / len(recent)
