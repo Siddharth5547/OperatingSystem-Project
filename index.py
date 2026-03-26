@@ -115,3 +115,91 @@ class WorkloadPredictor:
             return 3.0                 # default guess
         recent = self.history[-self.window:]
         return sum(recent) / len(recent)
+
+# ──────────────────── Scheduling Algorithms ───────────────────────
+
+class SchedulerBase:
+    """Common bookkeeping shared by all schedulers."""
+
+    name: str = "Base"
+
+    def __init__(self, cores: List[Core]):
+        self.cores = cores
+        self.ready_queue: List[Task] = []
+        self.completed: List[Task] = []
+        self.logs: List[str] = []
+        self.gantt: Dict[int, List[Tuple[int, int, int]]] = {c.id: [] for c in cores}
+        self.temp_history: Dict[int, List[float]] = {c.id: [] for c in cores}
+        self.predictor = WorkloadPredictor()
+
+    # ── helpers ──
+    def _idle_core(self, preferred_type: Optional[CoreType] = None) -> Optional[Core]:
+        for c in self.cores:
+            if c.current_task is None:
+                if preferred_type is None or c.core_type == preferred_type:
+                    return c
+        # fallback: any idle core
+        for c in self.cores:
+            if c.current_task is None:
+                return c
+        return None
+
+    def _assign(self, core: Core, task: Task, tick: int):
+        core.current_task = task
+        self.logs.append(f"  [t={tick}] {task} → {core.label()} @ {core.frequency} GHz")
+
+    def _tick_cores(self, tick: int):
+        """Execute one tick on every busy core; update energy & temp."""
+        for c in self.cores:
+            if c.current_task is not None:
+                c.current_task.remaining_time -= 1
+                c.compute_energy(load=1.0)
+                # gantt entry
+                self.gantt[c.id].append((tick, tick + 1, c.current_task.id))
+                if c.current_task.remaining_time <= 0:
+                    self.logs.append(f"  [t={tick}] {c.current_task} completed on {c.label()}")
+                    self.completed.append(c.current_task)
+                    c.current_task = None
+            c.update_temperature()
+            self.temp_history[c.id].append(c.temperature)
+
+    def total_energy(self) -> float:
+        return sum(c.energy for c in self.cores)
+
+# ────────────── Custom Energy-Efficient Scheduler ─────────────────
+
+class CustomScheduler(SchedulerBase):
+    name = "Custom (Energy-Efficient)"
+
+    def _adjust_dvfs(self):
+        predicted = self.predictor.predict()
+        for c in self.cores:
+            if c.is_overheated():
+                c.set_frequency("LOW")
+            elif predicted > 5:
+                c.set_frequency("HIGH" if c.core_type == CoreType.BIG else "MEDIUM")
+            elif predicted > 3:
+                c.set_frequency("MEDIUM")
+            else:
+                c.set_frequency("LOW")
+
+    def _handle_thermal(self, tick: int):
+        """Migrate tasks from overheated cores when possible."""
+        for c in self.cores:
+            if c.is_overheated() and c.current_task is not None:
+                target = None
+                for other in self.cores:
+                    if other.id != c.id and other.current_task is None and not other.is_overheated():
+                        target = other
+                        break
+                if target:
+                    task = c.current_task
+                    c.current_task = None
+                    target.current_task = task
+                    self.logs.append(
+                        f"  [t={tick}] THERMAL MIGRATION: {task} from {c.label()} → {target.label()}"
+                    )
+
+    def schedule(self, tick: int):
+        self._adjust_dvfs()
+        self._handle_thermal(tick)
