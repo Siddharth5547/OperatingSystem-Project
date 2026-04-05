@@ -203,3 +203,37 @@ class CustomScheduler(SchedulerBase):
     def schedule(self, tick: int):
         self._adjust_dvfs()
         self._handle_thermal(tick)
+        # Sort: higher priority first (lower number), then shorter remaining
+        self.ready_queue.sort(key=lambda t: (t.priority, t.remaining_time))
+
+        still_waiting: List[Task] = []
+        for task in self.ready_queue:
+            self.predictor.record(task.burst_time)
+            if task.task_type == TaskType.CPU:
+                core = self._idle_core(CoreType.BIG)
+            else:
+                core = self._idle_core(CoreType.LITTLE)
+            if core:
+                self._assign(core, task, tick)
+            else:
+                still_waiting.append(task)
+        self.ready_queue = still_waiting
+
+    def run(self, tasks: List[Task], max_ticks: int = 100) -> None:
+        tasks = sorted(tasks, key=lambda t: t.arrival_time)
+        task_idx = 0
+        for tick in range(max_ticks):
+            # 1. Inject arrivals
+            while task_idx < len(tasks) and tasks[task_idx].arrival_time <= tick:
+                self.ready_queue.append(tasks[task_idx])
+                task_idx += 1
+            # 2-4. Schedule
+            self.schedule(tick)
+            # 5-6. Execute
+            self._tick_cores(tick)
+            # early exit
+            if not self.ready_queue and all(c.current_task is None for c in self.cores) and task_idx >= len(tasks):
+                # pad temp history so all cores have same length
+                for c in self.cores:
+                    pass
+                break
