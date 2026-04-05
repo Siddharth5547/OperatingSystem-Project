@@ -352,3 +352,28 @@ def draw_temperature(scheduler: SchedulerBase, ax: plt.Axes):
     ax.set_ylabel("Temperature (°C)")
     ax.legend(fontsize=8)
     ax.grid(linestyle="--", alpha=0.4)
+
+    # ─────────────────────── Sample Tasks ─────────────────────────────
+
+def make_sample_tasks() -> List[Task]:
+    return [
+        Task(id=0,  arrival_time=0,  burst_time=6,  task_type=TaskType.CPU, priority=2),
+        Task(id=1,  arrival_time=0,  burst_time=3,  task_type=TaskType.IO,  priority=1),
+        Task(id=2,  arrival_time=1,  burst_time=8,  task_type=TaskType.CPU, priority=3),
+        Task(id=3,  arrival_time=1,  burst_time=2,  task_type=TaskType.IO,  priority=1),
+        Task(id=4,  arrival_time=2,  burst_time=5,  task_type=TaskType.CPU, priority=2),
+        Task(id=5,  arrival_time=3,  burst_time=4,  task_type=TaskType.IO,  priority=3),
+        Task(id=6,  arrival_time=4,  burst_time=7,  task_type=TaskType.CPU, priority=1),
+        Task(id=7,  arrival_time=5,  burst_time=3,  task_type=TaskType.CPU, priority=2),
+        Task(id=8,  arrival_time=6,  burst_time=2,  task_type=TaskType.IO,  priority=1),
+        Task(id=9,  arrival_time=7,  burst_time=9,  task_type=TaskType.CPU, priority=3),
+    ]
+
+
+def make_cores() -> List[Core]:
+    return [
+        Core(id=0, core_type=CoreType.BIG),
+        Core(id=1, core_type=CoreType.BIG),
+        Core(id=2, core_type=CoreType.LITTLE, frequency=FREQ_MED),
+        Core(id=3, core_type=CoreType.LITTLE, frequency=FREQ_LOW),
+    ]
