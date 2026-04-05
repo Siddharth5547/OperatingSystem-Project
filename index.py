@@ -305,3 +305,50 @@ class RRScheduler(SchedulerBase):
 
             if not self.ready_queue and all(c.current_task is None for c in self.cores) and task_idx >= len(tasks):
                 break
+
+# ──────────────────── Visualization Helpers ───────────────────────
+
+TASK_COLORS = plt.cm.tab20.colors  # 20 distinct colours
+
+def draw_gantt(scheduler: SchedulerBase, ax: plt.Axes):
+    ax.set_title(f"Gantt Chart – {scheduler.name}", fontweight="bold")
+    yticks, ylabels = [], []
+    for idx, core in enumerate(scheduler.cores):
+        y = idx
+        yticks.append(y)
+        ylabels.append(core.label())
+        for start, end, tid in scheduler.gantt[core.id]:
+            color = TASK_COLORS[tid % len(TASK_COLORS)]
+            ax.barh(y, end - start, left=start, height=0.6, color=color,
+                    edgecolor="black", linewidth=0.5)
+            ax.text((start + end) / 2, y, f"T{tid}", ha="center", va="center", fontsize=7)
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(ylabels)
+    ax.set_xlabel("Time (ticks)")
+    ax.invert_yaxis()
+    ax.grid(axis="x", linestyle="--", alpha=0.4)
+
+
+def draw_energy_comparison(schedulers: List[SchedulerBase], ax: plt.Axes):
+    names = [s.name for s in schedulers]
+    energies = [s.total_energy() for s in schedulers]
+    colors = ["#2ecc71", "#3498db", "#e74c3c"]
+    bars = ax.bar(names, energies, color=colors[:len(names)], edgecolor="black", linewidth=0.5)
+    for bar, e in zip(bars, energies):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
+                f"{e:.1f}", ha="center", va="bottom", fontsize=9)
+    ax.set_ylabel("Total Energy (freq² × load × t)")
+    ax.set_title("Energy Comparison", fontweight="bold")
+    ax.grid(axis="y", linestyle="--", alpha=0.4)
+
+
+def draw_temperature(scheduler: SchedulerBase, ax: plt.Axes):
+    ax.set_title(f"Core Temperature – {scheduler.name}", fontweight="bold")
+    for core in scheduler.cores:
+        temps = scheduler.temp_history[core.id]
+        ax.plot(range(len(temps)), temps, label=core.label())
+    ax.axhline(TEMP_THRESHOLD, color="red", linestyle="--", linewidth=0.8, label="Threshold")
+    ax.set_xlabel("Time (ticks)")
+    ax.set_ylabel("Temperature (°C)")
+    ax.legend(fontsize=8)
+    ax.grid(linestyle="--", alpha=0.4)
