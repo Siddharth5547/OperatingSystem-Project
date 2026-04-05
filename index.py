@@ -237,3 +237,71 @@ class CustomScheduler(SchedulerBase):
                 for c in self.cores:
                     pass
                 break
+
+# ─────────────────────────── FCFS ─────────────────────────────────
+
+class FCFSScheduler(SchedulerBase):
+    name = "FCFS"
+
+    def run(self, tasks: List[Task], max_ticks: int = 100) -> None:
+        tasks = sorted(tasks, key=lambda t: t.arrival_time)
+        task_idx = 0
+        for tick in range(max_ticks):
+            while task_idx < len(tasks) and tasks[task_idx].arrival_time <= tick:
+                self.ready_queue.append(tasks[task_idx])
+                task_idx += 1
+
+            for task in list(self.ready_queue):
+                core = self._idle_core()
+                if core:
+                    self._assign(core, task, tick)
+                    self.ready_queue.remove(task)
+
+            self._tick_cores(tick)
+
+            if not self.ready_queue and all(c.current_task is None for c in self.cores) and task_idx >= len(tasks):
+                break
+
+# ────────────────────────── Round Robin ───────────────────────────
+
+class RRScheduler(SchedulerBase):
+    name = "Round Robin"
+
+    def __init__(self, cores: List[Core], quantum: int = RR_QUANTUM):
+        super().__init__(cores)
+        self.quantum = quantum
+        self.time_on_core: Dict[int, int] = {c.id: 0 for c in cores}
+
+    def run(self, tasks: List[Task], max_ticks: int = 100) -> None:
+        tasks = sorted(tasks, key=lambda t: t.arrival_time)
+        task_idx = 0
+        for tick in range(max_ticks):
+            # arrivals
+            while task_idx < len(tasks) and tasks[task_idx].arrival_time <= tick:
+                self.ready_queue.append(tasks[task_idx])
+                task_idx += 1
+
+            # preempt on quantum expiry
+            for c in self.cores:
+                if c.current_task is not None:
+                    self.time_on_core[c.id] += 1
+                    if self.time_on_core[c.id] >= self.quantum and c.current_task.remaining_time > 0:
+                        self.logs.append(
+                            f"  [t={tick}] PREEMPT {c.current_task} on {c.label()} (quantum expired)"
+                        )
+                        self.ready_queue.append(c.current_task)
+                        c.current_task = None
+                        self.time_on_core[c.id] = 0
+
+            # assign from queue
+            for task in list(self.ready_queue):
+                core = self._idle_core()
+                if core:
+                    self._assign(core, task, tick)
+                    self.ready_queue.remove(task)
+                    self.time_on_core[core.id] = 0
+
+            self._tick_cores(tick)
+
+            if not self.ready_queue and all(c.current_task is None for c in self.cores) and task_idx >= len(tasks):
+                break
