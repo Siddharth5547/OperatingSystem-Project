@@ -377,3 +377,72 @@ def make_cores() -> List[Core]:
         Core(id=2, core_type=CoreType.LITTLE, frequency=FREQ_MED),
         Core(id=3, core_type=CoreType.LITTLE, frequency=FREQ_LOW),
     ]
+
+# ───────────────────────── main() ─────────────────────────────────
+
+def main():
+    print("=" * 65)
+    print("  Energy-Efficient CPU Scheduling Simulation")
+    print("  DVFS · Thermal Awareness · Workload Prediction")
+    print("=" * 65)
+
+    # ── Run each scheduler on an independent copy of tasks/cores ──
+    schedulers: List[SchedulerBase] = []
+
+    for SchedulerCls in (CustomScheduler, FCFSScheduler, RRScheduler):
+        tasks = make_sample_tasks()
+        cores = make_cores()
+        if SchedulerCls == RRScheduler:
+            sched = SchedulerCls(cores, quantum=RR_QUANTUM)
+        else:
+            sched = SchedulerCls(cores)
+
+        print(f"\n{'─' * 60}")
+        print(f"  Scheduler: {sched.name}")
+        print(f"{'─' * 60}")
+
+        sched.run(tasks, max_ticks=100)
+
+        for line in sched.logs:
+            print(line)
+
+        print(f"\n  Total energy consumed: {sched.total_energy():.2f}")
+        print(f"  Tasks completed:      {len(sched.completed)}")
+        schedulers.append(sched)
+
+    # ── Visualisation ──
+    fig = plt.figure(figsize=(18, 14))
+    fig.suptitle("CPU Scheduling Simulation Results", fontsize=15, fontweight="bold")
+
+    # Row 1: Gantt charts (one per scheduler)
+    for i, sched in enumerate(schedulers):
+        ax = fig.add_subplot(3, 3, i + 1)
+        draw_gantt(sched, ax)
+
+    # Row 2 col 1-2: Temperature for Custom scheduler
+    ax_temp = fig.add_subplot(3, 3, 4)
+    draw_temperature(schedulers[0], ax_temp)
+
+    # Row 2 col 2: Temperature for FCFS
+    ax_temp2 = fig.add_subplot(3, 3, 5)
+    draw_temperature(schedulers[1], ax_temp2)
+
+    # Row 2 col 3: Temperature for RR
+    ax_temp3 = fig.add_subplot(3, 3, 6)
+    draw_temperature(schedulers[2], ax_temp3)
+
+    # Row 3: Energy comparison (span full width)
+    ax_energy = fig.add_subplot(3, 1, 3)
+    draw_energy_comparison(schedulers, ax_energy)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    output_path = "scheduling_results.png"
+    plt.savefig(output_path, dpi=150)
+    print(f"\n✅ Results saved to {output_path}")
+    plt.show(block=False)
+    plt.pause(2)
+    plt.close("all")
+
+
+if __name__ == "__main__":
+    main()
